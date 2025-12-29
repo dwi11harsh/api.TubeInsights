@@ -9,10 +9,11 @@ class HardWorkRequestBody(BaseModel):
     type: Literal['playlist', 'video', 'channel']
 
 @router.post("/hard-work")
-def fetch_transcript_and_embed():
-    """
-    fetches the transcript -> parses it -> generates(+stores) embeddings -> returns failed and passed urls, title, thumbnail
-    """
+def fetch_transcript_and_embed(body: HardWorkRequestBody):
+    # destructure request-body
+    url = body.url
+    type = body.type
+
+    # do another type check in case the url is not of the mentioned type
     
-    return None
 
