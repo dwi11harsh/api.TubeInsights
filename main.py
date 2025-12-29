@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from routes import health, hard_work, chat
 
 app = FastAPI(
     title="api.TubeInsights",
@@ -6,30 +7,9 @@ app = FastAPI(
     version="1.0.0",
 )
 
-@app.get("/health")
-def read_root():
-    """
-    returns ok status 200
-    """
-    return {
-        "hello": "world"
-    }
-
-@app.post("/hard-work")
-def fetch_transcript_and_embed():
-    """
-    fetches the transcript -> parses it -> generates(+stores) embeddings -> returns failed and passed urls, title, thumbnail
-    """
-    
-    return None
-
-
-@app.post("/chat")
-def talk_to_llm():
-    """
-    initializes a chat with llm and works using websockets
-    """
-    return None
+app.include_router(health.router)
+app.include_router(hard_work.router)
+app.include_router(chat.router)
 
 
 if __name__ == "__main__":
