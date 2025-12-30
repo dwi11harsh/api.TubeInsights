@@ -39,7 +39,7 @@ def check_youtube_url_type(url: str) -> URLType:
 
         has_video= '/watch' in path and 'v' in params
         
-        has_playlist = '/playlist' in path or '/list' in params
+        has_playlist = '/playlist' in path or 'list' in params
 
         if has_video and has_playlist:
             return 'mixed'
