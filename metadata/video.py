@@ -1,6 +1,11 @@
-from typing import Union, Optional, Any
+from typing import Union, Optional, Dict, Any
 from pydantic import BaseModel
-from pytube import YouTube
+from playwright.async_api import async_playwright
+
+from metadata.lib.extract_video_data import extract_video_data_from_page
+from metadata.lib.extract_transcript_url import extract_transcript_url
+from metadata.lib.extract_transcript import extract_transcript_from_response, enrich_video_data_with_transcript
+from metadata.lib.setup_page import setup_page_with_cookies
 
 
 class VideoMetadata(BaseModel):
@@ -11,36 +16,47 @@ class VideoMetadata(BaseModel):
     lenght: Union[str, None]
 
 
-def safe_get_attr(obj: Any, attr_name: str, default: Optional[Any] = None) -> Optional[Any]:
+async def fetch_video_metadata(url: str, include_transcript: bool = False, crawler_state: Optional[Dict[str, Any]] = None) -> Union[VideoMetadata, None]:
+    playwright = None
+    browser = None
     try:
-        return getattr(obj, attr_name)
-    except Exception:
-        return default
-
-
-async def fetch_video_metadata(url:str)-> Union[VideoMetadata, None]:
-    try:
-        yt = YouTube(url)
+        playwright = await async_playwright().start()
+        browser = await playwright.chromium.launch(headless=True)
+        context = await browser.new_context()
+        page = await context.new_page()
         
-        vars_dict = {
-            'title': safe_get_attr(yt, 'title'),
-            'thumbnail': safe_get_attr(yt, 'thumbnail_url'),
-            'description': safe_get_attr(yt, 'description'),
-            'length': safe_get_attr(yt, 'length'),
-            'author': safe_get_attr(yt, 'author'),
-            'channel_id': safe_get_attr(yt, 'channel_id'),
-            'channel_url': safe_get_attr(yt, 'channel_url'),
-            'publish_date': safe_get_attr(yt, 'publish_date'),
-        }
+        await setup_page_with_cookies(page, context, crawler_state)
         
-        non_none_vars = [name for name, value in vars_dict.items() if value is not None]
-        print('Variables that are not None:', non_none_vars)
+        await page.goto(url, wait_until='networkidle')
         
-        none_vars = [name for name, value in vars_dict.items() if value is None]
-        if none_vars:
-            print('Variables that are None (failed to retrieve):', none_vars)
+        video_data = await extract_video_data_from_page(page, url, context, crawler_state)
         
-        return None
+        if not video_data:
+            return None
+        
+        if include_transcript:
+            transcript_url = await extract_transcript_url(page)
+            if transcript_url:
+                response = await page.goto(transcript_url, wait_until='networkidle')
+                if response:
+                    transcript = await extract_transcript_from_response(response)
+                    if transcript:
+                        video_data = enrich_video_data_with_transcript(video_data, transcript)
+        
+        await browser.close()
+        await playwright.stop()
+        
+        return VideoMetadata(
+            url=video_data.get('url', url),
+            id=video_data.get('video_id', ''),
+            name=video_data.get('title', ''),
+            channel=video_data.get('channel', ''),
+            lenght=str(video_data.get('duration', '')) if video_data.get('duration') else None
+        )
     except Exception as e:
-        print('exception occurred', str(e))
+        print(f'error occurred while fetching video metadata from url[{url}]: {e}')
+        if browser:
+            await browser.close()
+        if playwright:
+            await playwright.stop()
         return None
